@@ -345,11 +345,10 @@ class HitoriSolver:
         如果白色格子没有完全连通，且访问到的未知格子仅有一个，
         就把这个未知格子标记为白色（它是连接孤立白色区域的关键）
 
-        注意：当一个未知 cell 被标记为白色后，white_count 只需加 1，
-        且只需要在新标记白色格子时重置 visited。
+        注意：用一个整数 round 记录访问轮次，visited[r][c] == round 表示
+        在当前轮次已访问，避免每次都重新创建二维数组。
         """
         changed = False
-        new_white_cell = None
 
         # 初始统计白色格子数量
         white_count = sum(
@@ -360,70 +359,69 @@ class HitoriSolver:
         if white_count == 0:
             return False
 
-        # 初始化 visited
-        visited = [[False] * self.size for _ in range(self.size)]
+        # visited[r][c] = k 表示第 k 轮访问过，0 表示未访问
+        visited = [[0] * self.size for _ in range(self.size)]
+        round_num = 0
 
         while True:
-            # 如果有新标记的白色格子，从它开始并重置 visited
-            if new_white_cell:
-                start = new_white_cell
-                new_white_cell = None
-                visited = [[False] * self.size for _ in range(self.size)]
-            else:
-                # 找第一个白色格子作为起点
-                start = None
-                for r in range(self.size):
-                    for c in range(self.size):
-                        if self.state[r][c] == self.WHITE and not visited[r][c]:
-                            start = (r, c)
-                            break
-                    if start:
+            round_num += 1  # 新一轮，只需递增轮次
+            # 找第一个未访问的白色格子作为起点
+            start = None
+            for r in range(self.size):
+                for c in range(self.size):
+                    if self.state[r][c] == self.WHITE and visited[r][c] == 0:
+                        start = (r, c)
                         break
-
-                if start is None:
+                if start:
                     break
+
+            if start is None:
+                break
 
             # BFS 扩张
             queue = deque([start])
-            visited[start[0]][start[1]] = True
+            visited[start[0]][start[1]] = round_num
             component_size = 1
-            unknown_neighbors = []  # 该连通分量相邻的未知格子
-
             while queue:
-                r, c = queue.popleft()
+                unknown_neighbors = []  # 该连通分量相邻的未知格子
 
-                for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    nr, nc = r + dr, c + dc
-                    if 0 <= nr < self.size and 0 <= nc < self.size:
-                        neighbor_state = self.state[nr][nc]
+                while queue:
+                    r, c = queue.popleft()
 
-                        if neighbor_state == self.WHITE:
-                            # 白色邻居，加入队列继续扩张
-                            if not visited[nr][nc]:
-                                visited[nr][nc] = True
-                                component_size += 1
-                                queue.append((nr, nc))
-                        elif neighbor_state == self.UNKNOWN:
-                            # 未知邻居，记录下来
-                            if (nr, nc) not in unknown_neighbors:
-                                unknown_neighbors.append((nr, nc))
+                    for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < self.size and 0 <= nc < self.size:
+                            neighbor_state = self.state[nr][nc]
 
-            # 检查是否所有白色格子都在这个连通分量中
-            if component_size < white_count:
-                # 白色格子不完全连通
-                # 如果只有一个未知邻居可以连接，就标记为白色
-                if len(unknown_neighbors) == 1:
-                    ur, uc = unknown_neighbors[0]
-                    self.set_cell_state(ur, uc, self.WHITE)
-                    changed = True
-                    # 标记发生变化，需要从新标记的白色格子重新开始
-                    new_white_cell = (ur, uc)
-                    white_count += 1  # 只需加 1，无需重新统计
-                    
-            else:
-                # 所有白色格子已连通，无需继续
+                            if neighbor_state == self.WHITE:
+                                # 白色邻居，加入队列继续扩张
+                                if visited[nr][nc] != round_num:
+                                    visited[nr][nc] = round_num
+                                    component_size += 1
+                                    queue.append((nr, nc))
+                            elif neighbor_state == self.UNKNOWN:
+                                # 未知邻居，记录下来
+                                if (nr, nc) not in unknown_neighbors:
+                                    unknown_neighbors.append((nr, nc))
+
+                # 检查是否所有白色格子都在这个连通分量中
+                if component_size < white_count:
+                    # 白色格子不完全连通
+                    # 如果只有一个未知邻居可以连接，就标记为白色
+                    if len(unknown_neighbors) == 1:
+                        ur, uc = unknown_neighbors[0]
+                        self.set_cell_state(ur, uc, self.WHITE)
+                        changed = True
+                        # 标记发生变化，需要从新标记的白色格子重新开始
+                        white_count += 1  # 只需加 1，无需重新统计
+                        queue.append((ur, uc))
+                        visited[ur][uc] = round_num
+
+                else:
+                    # 所有白色格子已连通，无需继续
+                    break
+            if component_size == white_count:
                 break
-
         return changed
 
     def apply_logical_rules(self) -> int:
