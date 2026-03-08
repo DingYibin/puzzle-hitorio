@@ -368,7 +368,6 @@ class HitoriSolver:
             if new_white_cell:
                 start = new_white_cell
                 new_white_cell = None
-                white_count += 1  # 只需加 1，无需重新统计
                 visited = [[False] * self.size for _ in range(self.size)]
             else:
                 # 找第一个白色格子作为起点
@@ -419,6 +418,8 @@ class HitoriSolver:
                     changed = True
                     # 标记发生变化，需要从新标记的白色格子重新开始
                     new_white_cell = (ur, uc)
+                    white_count += 1  # 只需加 1，无需重新统计
+                    
             else:
                 # 所有白色格子已连通，无需继续
                 break
