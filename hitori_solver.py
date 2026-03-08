@@ -344,36 +344,51 @@ class HitoriSolver:
         - 访问未知邻居时，记录下来但不继续扩张
         如果白色格子没有完全连通，且访问到的未知格子仅有一个，
         就把这个未知格子标记为白色（它是连接孤立白色区域的关键）
+
+        注意：当一个未知 cell 被标记为白色后，white_count 只需加 1，
+        且只需要在新标记白色格子时重置 visited。
         """
         changed = False
+        new_white_cell = None
 
-        # 统计所有白色格子
-        all_white_cells = set()
-        for r in range(self.size):
-            for c in range(self.size):
-                if self.state[r][c] == self.WHITE:
-                    all_white_cells.add((r, c))
+        # 初始统计白色格子数量
+        white_count = sum(
+            1 for r in range(self.size) for c in range(self.size)
+            if self.state[r][c] == self.WHITE
+        )
 
-        if not all_white_cells:
+        if white_count == 0:
             return False
 
-        visited_white = set()
+        # 初始化 visited
+        visited = [[False] * self.size for _ in range(self.size)]
 
-        while len(visited_white) < len(all_white_cells):
-            # 找到一个未访问的白色格子作为起点
-            start = None
-            for cell in all_white_cells:
-                if cell not in visited_white:
-                    start = cell
+        while True:
+            # 如果有新标记的白色格子，从它开始并重置 visited
+            if new_white_cell:
+                start = new_white_cell
+                new_white_cell = None
+                white_count += 1  # 只需加 1，无需重新统计
+                visited = [[False] * self.size for _ in range(self.size)]
+            else:
+                # 找第一个白色格子作为起点
+                start = None
+                for r in range(self.size):
+                    for c in range(self.size):
+                        if self.state[r][c] == self.WHITE and not visited[r][c]:
+                            start = (r, c)
+                            break
+                    if start:
+                        break
+
+                if start is None:
                     break
-
-            if start is None:
-                break
 
             # BFS 扩张
             queue = deque([start])
-            visited_in_this_component = set([start])
-            unknown_neighbors = set()  # 该连通分量相邻的未知格子
+            visited[start[0]][start[1]] = True
+            component_size = 1
+            unknown_neighbors = []  # 该连通分量相邻的未知格子
 
             while queue:
                 r, c = queue.popleft()
@@ -382,28 +397,31 @@ class HitoriSolver:
                     nr, nc = r + dr, c + dc
                     if 0 <= nr < self.size and 0 <= nc < self.size:
                         neighbor_state = self.state[nr][nc]
-                        neighbor = (nr, nc)
 
                         if neighbor_state == self.WHITE:
                             # 白色邻居，加入队列继续扩张
-                            if neighbor not in visited_in_this_component:
-                                visited_in_this_component.add(neighbor)
-                                queue.append(neighbor)
+                            if not visited[nr][nc]:
+                                visited[nr][nc] = True
+                                component_size += 1
+                                queue.append((nr, nc))
                         elif neighbor_state == self.UNKNOWN:
                             # 未知邻居，记录下来
-                            unknown_neighbors.add(neighbor)
-
-            # 标记该连通分量中的所有白色格子为已访问
-            visited_white.update(visited_in_this_component)
+                            if (nr, nc) not in unknown_neighbors:
+                                unknown_neighbors.append((nr, nc))
 
             # 检查是否所有白色格子都在这个连通分量中
-            if len(visited_in_this_component) < len(all_white_cells):
+            if component_size < white_count:
                 # 白色格子不完全连通
                 # 如果只有一个未知邻居可以连接，就标记为白色
                 if len(unknown_neighbors) == 1:
-                    ur, uc = list(unknown_neighbors)[0]
+                    ur, uc = unknown_neighbors[0]
                     self.set_cell_state(ur, uc, self.WHITE)
                     changed = True
+                    # 标记发生变化，需要从新标记的白色格子重新开始
+                    new_white_cell = (ur, uc)
+            else:
+                # 所有白色格子已连通，无需继续
+                break
 
         return changed
 
