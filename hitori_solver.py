@@ -362,17 +362,17 @@ class HitoriSolver:
         # visited[r][c] = k 表示第 k 轮访问过，0 表示未访问
         visited = [[0] * self.size for _ in range(self.size)]
         round_num = 0
-
+        last_start = -1
         while True:
             round_num += 1  # 新一轮，只需递增轮次
             # 找第一个未访问的白色格子作为起点
             start = None
-            for r in range(self.size):
-                for c in range(self.size):
-                    if self.state[r][c] == self.WHITE and visited[r][c] == 0:
-                        start = (r, c)
-                        break
-                if start:
+            for i in range(last_start + 1, self.size ** 2):
+                r = i // self.size
+                c = i % self.size
+                if self.state[r][c] == self.WHITE and visited[r][c] == 0:
+                    start = (r, c)
+                    last_start = i
                     break
 
             if start is None:
