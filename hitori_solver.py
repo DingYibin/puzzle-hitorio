@@ -642,8 +642,8 @@ class HitoriSolver:
         saved_queue = deque(self.propagation_queue)
 
         # 尝试标记为白色
-        self.set_cell_state(r, c, self.WHITE)
-        self.apply_rules_fast()  # 传播规则
+        self.set_cell_state(r, c, self.BLACK)
+        self.apply_logical_rules()
 
         # 检查是否有相邻黑色或重复白色
         if self.check_adjacent_black() and self.check_duplicate_white():
@@ -654,8 +654,8 @@ class HitoriSolver:
         self.state = saved_state
         self.propagation_queue = saved_queue
 
-        self.set_cell_state(r, c, self.BLACK)
-        self.apply_rules_fast()  # 传播规则
+        self.set_cell_state(r, c, self.WHITE)
+        self.apply_logical_rules()
 
         # 检查是否有相邻黑色或重复白色
         if self.check_adjacent_black() and self.check_duplicate_white():
