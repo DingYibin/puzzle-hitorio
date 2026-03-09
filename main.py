@@ -4,15 +4,43 @@ Hitori Puzzle Solver - 主程序
 使用方法:
     uv run python main.py                    # 运行示例谜题
     uv run python main.py --input           # 手动输入谜题
-    uv run python main.py --size 10         # 指定大小
     uv run python main.py --fetch           # 从网站获取随机谜题
     uv run python main.py --id 5            # 获取指定编号的谜题
+    uv run python main.py --daily           # 获取每日谜题
+    uv run python main.py --weekly          # 获取每周谜题
+    uv run python main.py --monthly         # 获取每月谜题
     uv run python main.py --id 5 --size 10  # 获取 10x10 编号 5 的谜题
 """
 
 import sys
 import json
+import requests
+import re
 from hitori_solver import HitoriSolver
+
+
+# URL 参数映射
+SIZE_MAP = {
+    '5': '1',       # 5x5 普通 (默认)
+    '5e': '0',      # 5x5 简单 (主页)
+    '5n': '1',      # 5x5 普通
+    '5h': '2',      # 5x5 困难
+    '10': '4',      # 10x10 普通 (默认)
+    '10e': '3',     # 10x10 简单
+    '10n': '4',     # 10x10 普通
+    '10h': '5',     # 10x10 困难
+    '15': '7',      # 15x15 普通 (默认)
+    '15e': '6',     # 15x15 简单
+    '15n': '7',     # 15x15 普通
+    '15h': '8',     # 15x15 困难
+    '20': '10',     # 20x20 普通 (默认)
+    '20e': '9',     # 20x20 简单
+    '20n': '10',    # 20x20 普通
+    '20h': '11',    # 20x20 困难
+    'daily': '12',   # 每日谜题
+    'weekly': '13',  # 每周谜题
+    'monthly': '14', # 每月谜题
+}
 
 
 def print_banner():
@@ -129,6 +157,170 @@ def solve_grid(grid: list[list[int]], show_color: bool = True):
         return False
 
 
+def fetch_puzzle_data(url: str) -> str | None:
+    """
+    从网站获取谜题数据字符串
+
+    Returns:
+        谜题数据字符串，失败返回 None
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        html = response.text
+
+        # 查找 var task = '...'
+        match = re.search(r"var\s+task\s*=\s*'([^']+)'", html)
+        if match:
+            return match.group(1)
+
+        return None
+
+    except Exception as e:
+        print(f"获取谜题时出错：{e}")
+        return None
+
+
+def parse_task_string(task: str, size: int) -> list[list[int]]:
+    """
+    解析任务字符串为二维网格
+
+    Args:
+        task: 谜题字符串（如 '4515451443254454253154453'，其中 'a'=10, 'b'=11, etc.）
+        size: 网格大小
+
+    Returns:
+        二维列表表示的谜题网格
+    """
+    grid = []
+
+    for r in range(size):
+        row = []
+        for c in range(size):
+            idx = r * size + c
+            if idx < len(task):
+                char = task[idx]
+                if char.isdigit():
+                    row.append(int(char))
+                elif char.islower():
+                    # 'a' = 10, 'b' = 11, etc.
+                    row.append(ord(char) - ord('a') + 10)
+                else:
+                    row.append(0)
+            else:
+                row.append(0)
+        grid.append(row)
+
+    return grid
+
+
+def get_puzzle_by_size(size_param: str) -> tuple[list[list[int]] | None, int]:
+    """
+    根据 size 参数获取谜题
+
+    Args:
+        size_param: 尺寸参数，如 '12' (每日), '13' (每周), '14' (每月), 或 '1'-'11' (普通谜题)
+
+    Returns:
+        (网格，大小) 或 (None, 0)
+    """
+    url = f"https://cn.puzzle-hitori.com/?size={size_param}"
+
+    task_data = fetch_puzzle_data(url)
+
+    if task_data:
+        grid_size = int(len(task_data) ** 0.5)
+        print(f"获取到谜题 ({grid_size}x{grid_size})")
+        grid = parse_task_string(task_data, grid_size)
+        return grid, grid_size
+
+    return None, 0
+
+
+def get_daily_puzzle() -> tuple[list[list[int]] | None, int]:
+    """获取每日谜题"""
+    return get_puzzle_by_size('12')
+
+
+def get_weekly_puzzle() -> tuple[list[list[int]] | None, int]:
+    """获取每周谜题"""
+    return get_puzzle_by_size('13')
+
+
+def get_monthly_puzzle() -> tuple[list[list[int]] | None, int]:
+    """获取每月谜题"""
+    return get_puzzle_by_size('14')
+
+
+def get_puzzle(size: str = "5", difficulty: str = "easy") -> tuple[list[list[int]] | None, int]:
+    """
+    获取指定大小和难度的谜题
+
+    Args:
+        size: 谜题大小 "5", "10", "15", "20"
+        difficulty: 难度 "easy", "normal", "hard"
+
+    Returns:
+        (网格，大小) 或 (None, 0)
+    """
+    diff_short = {'easy': 'e', 'normal': 'n', 'hard': 'h'}
+    size_key = f"{size}{diff_short.get(difficulty, 'n')}"
+    size_param = SIZE_MAP.get(size_key, SIZE_MAP.get(size, '1'))
+
+    return get_puzzle_by_size(size_param)
+
+
+def get_puzzle_by_id(size_param: str, puzzle_id: int) -> tuple[list[list[int]] | None, int]:
+    """
+    根据大小和编号获取指定谜题
+
+    Args:
+        size_param: 尺寸参数，如 '0' (5x5 简单), '1' (5x5 普通), etc.
+        puzzle_id: 谜题编号
+
+    Returns:
+        (网格，大小) 或 (None, 0)
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    # POST 到主页获取指定谜题
+    post_data = f"specific=1&size={size_param}&specid={puzzle_id}"
+
+    try:
+        response = requests.post(
+            "https://cn.puzzle-hitori.com/",
+            headers=headers,
+            data=post_data,
+            timeout=30
+        )
+        response.raise_for_status()
+        html = response.text
+
+        # 查找 var task = '...'
+        match = re.search(r"var\s+task\s*=\s*'([^']+)'", html)
+        if match:
+            task_data = match.group(1)
+            grid_size = int(len(task_data) ** 0.5)
+            print(f"获取到谜题 (大小：{grid_size}x{grid_size}, 编号：{puzzle_id})")
+            grid = parse_task_string(task_data, grid_size)
+            return grid, grid_size
+
+        return None, 0
+
+    except Exception as e:
+        print(f"获取谜题时出错：{e}")
+        return None, 0
+
+
 def main():
     """主函数"""
     print_banner()
@@ -136,7 +328,11 @@ def main():
     # 解析命令行参数
     show_color = '--no-color' not in sys.argv
     use_input = '--input' in sys.argv or '-i' in sys.argv
-    use_fetch = '--fetch' in sys.argv or '-f' in sys.argv
+
+    # 特殊获取模式
+    use_daily = '--daily' in sys.argv or '-d' in sys.argv
+    use_weekly = '--weekly' in sys.argv or '-w' in sys.argv
+    use_monthly = '--monthly' in sys.argv or '-m' in sys.argv
 
     # 解析 --id 参数（指定谜题编号）
     puzzle_id = None
@@ -154,29 +350,43 @@ def main():
         elif arg in ('--diff', '-diff') and i < len(sys.argv) - 1:
             difficulty = sys.argv[i + 1]
 
-    if use_input:
+    # 特殊模式优先
+    if use_daily:
+        print("获取每日谜题...")
+        grid, grid_size = get_daily_puzzle()
+        if grid:
+            solve_grid(grid, show_color)
+        else:
+            print("未能获取每日谜题")
+    elif use_weekly:
+        print("获取每周谜题...")
+        grid, grid_size = get_weekly_puzzle()
+        if grid:
+            solve_grid(grid, show_color)
+        else:
+            print("未能获取每周谜题")
+    elif use_monthly:
+        print("获取每月谜题...")
+        grid, grid_size = get_monthly_puzzle()
+        if grid:
+            solve_grid(grid, show_color)
+        else:
+            print("未能获取每月谜题")
+    elif use_input:
         # 手动输入模式
         grid = input_grid()
         if grid:
             solve_grid(grid, show_color)
         else:
             print("已取消")
-    elif use_fetch or puzzle_id is not None:
-        # 从网站获取谜题
-        from fetch_puzzle import get_puzzle, get_puzzle_by_id, SIZE_MAP
-
+    elif puzzle_id is not None:
+        # 使用指定编号获取谜题
         diff_short = {'easy': 'e', 'normal': 'n', 'hard': 'h'}
         size_key = f"{size_param}{diff_short.get(difficulty, 'n')}"
         size_code = SIZE_MAP.get(size_key, SIZE_MAP.get(size_param, '1'))
 
-        if puzzle_id is not None:
-            # 使用指定编号获取谜题
-            print(f"获取 {size_param}x{size_param} {difficulty} 编号 {puzzle_id} 的谜题...")
-            grid, grid_size = get_puzzle_by_id(size_code, puzzle_id)
-        else:
-            # 根据大小和难度获取随机谜题
-            print(f"获取 {size_param}x{size_param} {difficulty} 谜题...")
-            grid, grid_size = get_puzzle(size_param, difficulty)
+        print(f"获取 {size_param}x{size_param} {difficulty} 编号 {puzzle_id} 的谜题...")
+        grid, grid_size = get_puzzle_by_id(size_code, puzzle_id)
 
         if grid:
             solve_grid(grid, show_color)
@@ -246,7 +456,7 @@ def main():
 
         print("\n" + "=" * 50)
         print("提示：使用 --input 或 -i 参数输入自己的谜题")
-        print("      使用 --fetch 或 -f 参数从网站获取谜题")
+        print("      使用 --daily/-d、--weekly/-w、--monthly/-m 获取特殊谜题")
         print("      使用 --id <编号> 获取指定编号的谜题")
         print("      使用 --no-color 禁用颜色输出")
 
