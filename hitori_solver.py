@@ -151,27 +151,6 @@ class HitoriSolver:
 
         return changed
 
-    def rule_corner_sandwich(self) -> bool:
-        """
-        规则 2: L 形三个相同数字，角上的必须是白色（静态规则）
-        例如：
-          3 3
-          3
-        角上的 3 如果是黑色，会导致两个相邻黑色
-        """
-        changed = False
-
-        for r in range(self.size - 1):
-            for c in range(self.size - 1):
-                val = self.grid[r][c]
-                if self.grid[r][c + 1] == val and self.grid[r + 1][c] == val:
-                    # 三个数字形成 L 形
-                    if self.state[r][c] == self.UNKNOWN:
-                        self.set_cell_state(r, c, self.WHITE)
-                        changed = True
-
-        return changed
-
     def rule_adjacent_same_pair(self) -> bool:
         """
         规则 3: 两个相邻的相同数字（静态规则）
@@ -210,22 +189,6 @@ class HitoriSolver:
                                 changed = True
 
         return changed
-
-    def rule_black_neighbors_must_be_white(self) -> bool:
-        """
-        规则 4: 黑色格子的相邻格子必须是白色
-        注意：这个规则主要由 propagate_changes 通过队列处理
-        """
-        # 这个规则已经在 propagate_changes 中处理
-        return False
-
-    def rule_white_excludes_same(self) -> bool:
-        """
-        规则 5: 当一个数字被标记为白色，同行/同列的相同数字必须为黑色
-        注意：这个规则主要由 propagate_changes 通过队列处理
-        """
-        # 这个规则已经在 propagate_changes 中处理
-        return False
 
     def _check_connectivity_uf(self) -> bool:
         """
@@ -378,47 +341,42 @@ class HitoriSolver:
             queue = deque([start])
             visited[start[0]][start[1]] = round_num
             component_size = 1
+            unknown_neighbors = []  # 该连通分量相邻的未知格子
+
             while queue:
-                unknown_neighbors = []  # 该连通分量相邻的未知格子
+                r, c = queue.popleft()
 
-                while queue:
-                    r, c = queue.popleft()
+                for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < self.size and 0 <= nc < self.size:
+                        neighbor_state = self.state[nr][nc]
 
-                    for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                        nr, nc = r + dr, c + dc
-                        if 0 <= nr < self.size and 0 <= nc < self.size:
-                            neighbor_state = self.state[nr][nc]
+                        if neighbor_state == self.WHITE:
+                            # 白色邻居，加入队列继续扩张
+                            if visited[nr][nc] != round_num:
+                                visited[nr][nc] = round_num
+                                component_size += 1
+                                queue.append((nr, nc))
+                        elif neighbor_state == self.UNKNOWN:
+                            # 未知邻居，记录下来
+                            if (nr, nc) not in unknown_neighbors:
+                                unknown_neighbors.append((nr, nc))
 
-                            if neighbor_state == self.WHITE:
-                                # 白色邻居，加入队列继续扩张
-                                if visited[nr][nc] != round_num:
-                                    visited[nr][nc] = round_num
-                                    component_size += 1
-                                    queue.append((nr, nc))
-                            elif neighbor_state == self.UNKNOWN:
-                                # 未知邻居，记录下来
-                                if (nr, nc) not in unknown_neighbors:
-                                    unknown_neighbors.append((nr, nc))
+            # 检查是否所有白色格子都在这个连通分量中
+            if component_size < white_count:
+                # 白色格子不完全连通
+                # 如果只有一个未知邻居可以连接，就标记为白色
+                if len(unknown_neighbors) == 1:
+                    ur, uc = unknown_neighbors[0]
+                    self.set_cell_state(ur, uc, self.WHITE)
+                    # 标记发生变化，需要从新标记的白色格子重新开始
+                    white_count += 1  # 只需加 1，无需重新统计
+                    return True
 
-                # 检查是否所有白色格子都在这个连通分量中
-                if component_size < white_count:
-                    # 白色格子不完全连通
-                    # 如果只有一个未知邻居可以连接，就标记为白色
-                    if len(unknown_neighbors) == 1:
-                        ur, uc = unknown_neighbors[0]
-                        self.set_cell_state(ur, uc, self.WHITE)
-                        changed = True
-                        # 标记发生变化，需要从新标记的白色格子重新开始
-                        white_count += 1  # 只需加 1，无需重新统计
-                        queue.append((ur, uc))
-                        visited[ur][uc] = round_num
-
-                else:
-                    # 所有白色格子已连通，无需继续
-                    break
-            if component_size == white_count:
+            else:
+                # 所有白色格子已连通，无需继续
                 break
-        return changed
+        return False
 
     def apply_logical_rules(self) -> int:
         """
@@ -432,6 +390,9 @@ class HitoriSolver:
             run_again = False
             # 应用新规则 6：白色格子单一未知邻居
             if self.rule_white_single_unknown_neighbor():
+                run_again = True
+                changed = True
+            if self.apply_rules_fast():
                 run_again = True
                 changed = True
             # 应用新规则 7：基于连通性的单一未知推理
@@ -516,6 +477,7 @@ class HitoriSolver:
         print("预处理：应用静态规则...")
         preprocessed = self.preprocess()
         print(f"  预处理完成{'（有变化）' if preprocessed else '（无变化）'}")
+        self.print_state_details()
 
         # 第二阶段：动态规则传播
         print("应用动态规则...")
@@ -584,7 +546,7 @@ class HitoriSolver:
         num_width = len(str(max_num))
         cell_width = max(2, num_width + 2)
 
-        print("\n  回溯前状态（未知格子按灰色显示）:")
+        print("\n  当前状态（未知格子按灰色显示）:")
 
         # 列标题
         header = "   " + "".join(f"{BOLD}{c:^{cell_width}}{RESET}" for c in range(self.size))
@@ -645,7 +607,7 @@ class HitoriSolver:
         if self.check_adjacent_black() and self.check_duplicate_white():
             if self.backtrack_solve(unknown_cells, idx + 1):
                 return True
-        # self.print_state_details()
+        
         # 恢复状态，尝试标记为黑色
         self.state = copy.deepcopy(saved_state)
         self.propagation_queue = copy.deepcopy(saved_queue)
@@ -657,7 +619,7 @@ class HitoriSolver:
         if self.check_adjacent_black() and self.check_duplicate_white():
             if self.backtrack_solve(unknown_cells, idx + 1):
                 return True
-        # self.print_state_details()
+
         # 恢复状态
         self.state = copy.deepcopy(saved_state)
         self.propagation_queue = copy.deepcopy(saved_queue)
