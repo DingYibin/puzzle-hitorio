@@ -157,12 +157,12 @@ def solve_grid(grid: list[list[int]], show_color: bool = True):
         return False
 
 
-def fetch_puzzle_data(url: str) -> str | None:
+def fetch_puzzle_data(url: str) -> tuple[str | None, str | None]:
     """
-    从网站获取谜题数据字符串
+    从网站获取谜题数据字符串和题号
 
     Returns:
-        谜题数据字符串，失败返回 None
+        (谜题数据字符串，题号)，失败返回 (None, None)
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -175,15 +175,25 @@ def fetch_puzzle_data(url: str) -> str | None:
         html = response.text
 
         # 查找 var task = '...'
-        match = re.search(r"var\s+task\s*=\s*'([^']+)'", html)
-        if match:
-            return match.group(1)
+        task_match = re.search(r"var\s+task\s*=\s*'([^']+)'", html)
+        task_data = task_match.group(1) if task_match else None
 
-        return None
+        # 查找 puzzleID 题号
+        puzzle_id = None
+        id_match = re.search(r'id="puzzleID"\s*>\s*([0-9,]+)', html)
+        if id_match:
+            puzzle_id = id_match.group(1)
+        else:
+            # 尝试查找特殊谜题的日期格式 (如 "Mar 09, 2026")
+            date_match = re.search(r'<option[^>]+selected="selected"[^>]*>\s*([A-Za-z]+\s+\d+,\s*\d+)\s*</option>', html)
+            if date_match:
+                puzzle_id = date_match.group(1).strip()
+
+        return task_data, puzzle_id
 
     except Exception as e:
         print(f"获取谜题时出错：{e}")
-        return None
+        return None, None
 
 
 def parse_task_string(task: str, size: int) -> list[list[int]]:
@@ -219,7 +229,7 @@ def parse_task_string(task: str, size: int) -> list[list[int]]:
     return grid
 
 
-def get_puzzle_by_size(size_param: str) -> tuple[list[list[int]] | None, int]:
+def get_puzzle_by_size(size_param: str) -> tuple[list[list[int]] | None, int, str | None]:
     """
     根据 size 参数获取谜题
 
@@ -227,37 +237,40 @@ def get_puzzle_by_size(size_param: str) -> tuple[list[list[int]] | None, int]:
         size_param: 尺寸参数，如 '12' (每日), '13' (每周), '14' (每月), 或 '1'-'11' (普通谜题)
 
     Returns:
-        (网格，大小) 或 (None, 0)
+        (网格，大小，题号) 或 (None, 0, None)
     """
     url = f"https://cn.puzzle-hitori.com/?size={size_param}"
 
-    task_data = fetch_puzzle_data(url)
+    task_data, puzzle_id = fetch_puzzle_data(url)
 
     if task_data:
         grid_size = int(len(task_data) ** 0.5)
-        print(f"获取到谜题 ({grid_size}x{grid_size})")
+        if puzzle_id:
+            print(f"获取到谜题 ({grid_size}x{grid_size}, 题号：{puzzle_id})")
+        else:
+            print(f"获取到谜题 ({grid_size}x{grid_size})")
         grid = parse_task_string(task_data, grid_size)
-        return grid, grid_size
+        return grid, grid_size, puzzle_id
 
-    return None, 0
+    return None, 0, None
 
 
-def get_daily_puzzle() -> tuple[list[list[int]] | None, int]:
+def get_daily_puzzle() -> tuple[list[list[int]] | None, int, str | None]:
     """获取每日谜题"""
     return get_puzzle_by_size('12')
 
 
-def get_weekly_puzzle() -> tuple[list[list[int]] | None, int]:
+def get_weekly_puzzle() -> tuple[list[list[int]] | None, int, str | None]:
     """获取每周谜题"""
     return get_puzzle_by_size('13')
 
 
-def get_monthly_puzzle() -> tuple[list[list[int]] | None, int]:
+def get_monthly_puzzle() -> tuple[list[list[int]] | None, int, str | None]:
     """获取每月谜题"""
     return get_puzzle_by_size('14')
 
 
-def get_puzzle(size: str = "5", difficulty: str = "easy") -> tuple[list[list[int]] | None, int]:
+def get_puzzle(size: str = "5", difficulty: str = "easy") -> tuple[list[list[int]] | None, int, str | None]:
     """
     获取指定大小和难度的谜题
 
@@ -266,7 +279,7 @@ def get_puzzle(size: str = "5", difficulty: str = "easy") -> tuple[list[list[int
         difficulty: 难度 "easy", "normal", "hard"
 
     Returns:
-        (网格，大小) 或 (None, 0)
+        (网格，大小，题号) 或 (None, 0, None)
     """
     diff_short = {'easy': 'e', 'normal': 'n', 'hard': 'h'}
     size_key = f"{size}{diff_short.get(difficulty, 'n')}"
@@ -275,7 +288,7 @@ def get_puzzle(size: str = "5", difficulty: str = "easy") -> tuple[list[list[int
     return get_puzzle_by_size(size_param)
 
 
-def get_puzzle_by_id(size_param: str, puzzle_id: int) -> tuple[list[list[int]] | None, int]:
+def get_puzzle_by_id(size_param: str, puzzle_id: int) -> tuple[list[list[int]] | None, int, str | None]:
     """
     根据大小和编号获取指定谜题
 
@@ -284,7 +297,7 @@ def get_puzzle_by_id(size_param: str, puzzle_id: int) -> tuple[list[list[int]] |
         puzzle_id: 谜题编号
 
     Returns:
-        (网格，大小) 或 (None, 0)
+        (网格，大小，题号) 或 (None, 0, None)
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -306,19 +319,24 @@ def get_puzzle_by_id(size_param: str, puzzle_id: int) -> tuple[list[list[int]] |
         html = response.text
 
         # 查找 var task = '...'
-        match = re.search(r"var\s+task\s*=\s*'([^']+)'", html)
-        if match:
-            task_data = match.group(1)
+        task_match = re.search(r"var\s+task\s*=\s*'([^']+)'", html)
+        if task_match:
+            task_data = task_match.group(1)
             grid_size = int(len(task_data) ** 0.5)
-            print(f"获取到谜题 (大小：{grid_size}x{grid_size}, 编号：{puzzle_id})")
-            grid = parse_task_string(task_data, grid_size)
-            return grid, grid_size
 
-        return None, 0
+            # 查找 puzzleID 题号
+            puzzle_id_match = re.search(r'id="puzzleID"\s*>\s*([0-9,]+)', html)
+            displayed_id = puzzle_id_match.group(1) if puzzle_id_match else str(puzzle_id)
+
+            print(f"获取到谜题 (大小：{grid_size}x{grid_size}, 题号：{displayed_id})")
+            grid = parse_task_string(task_data, grid_size)
+            return grid, grid_size, displayed_id
+
+        return None, 0, None
 
     except Exception as e:
         print(f"获取谜题时出错：{e}")
-        return None, 0
+        return None, 0, None
 
 
 def main():
@@ -328,6 +346,7 @@ def main():
     # 解析命令行参数
     show_color = '--no-color' not in sys.argv
     use_input = '--input' in sys.argv or '-i' in sys.argv
+    use_fetch = '--fetch' in sys.argv or '-f' in sys.argv
 
     # 特殊获取模式
     use_daily = '--daily' in sys.argv or '-d' in sys.argv
@@ -353,40 +372,37 @@ def main():
     # 特殊模式优先
     if use_daily:
         print("获取每日谜题...")
-        grid, grid_size = get_daily_puzzle()
+        grid, grid_size, puzzle_id_str = get_daily_puzzle()
         if grid:
             solve_grid(grid, show_color)
         else:
             print("未能获取每日谜题")
     elif use_weekly:
         print("获取每周谜题...")
-        grid, grid_size = get_weekly_puzzle()
+        grid, grid_size, puzzle_id_str = get_weekly_puzzle()
         if grid:
             solve_grid(grid, show_color)
         else:
             print("未能获取每周谜题")
     elif use_monthly:
         print("获取每月谜题...")
-        grid, grid_size = get_monthly_puzzle()
+        grid, grid_size, puzzle_id_str = get_monthly_puzzle()
         if grid:
             solve_grid(grid, show_color)
         else:
             print("未能获取每月谜题")
-    elif use_input:
-        # 手动输入模式
-        grid = input_grid()
-        if grid:
-            solve_grid(grid, show_color)
-        else:
-            print("已取消")
-    elif puzzle_id is not None:
-        # 使用指定编号获取谜题
+    elif use_fetch or puzzle_id is not None:
+        # 从网站获取谜题
         diff_short = {'easy': 'e', 'normal': 'n', 'hard': 'h'}
         size_key = f"{size_param}{diff_short.get(difficulty, 'n')}"
         size_code = SIZE_MAP.get(size_key, SIZE_MAP.get(size_param, '1'))
 
-        print(f"获取 {size_param}x{size_param} {difficulty} 编号 {puzzle_id} 的谜题...")
-        grid, grid_size = get_puzzle_by_id(size_code, puzzle_id)
+        if puzzle_id is not None:
+            print(f"获取 {size_param}x{size_param} {difficulty} 编号 {puzzle_id} 的谜题...")
+        else:
+            print(f"获取 {size_param}x{size_param} {difficulty} 谜题...")
+
+        grid, grid_size, puzzle_id_str = get_puzzle_by_id(size_code, puzzle_id) if puzzle_id is not None else get_puzzle(size_param, difficulty)
 
         if grid:
             solve_grid(grid, show_color)
@@ -396,6 +412,13 @@ def main():
             print("  1. 网络连接问题")
             print("  2. 网站结构变更")
             print("  3. 编号不存在")
+    elif use_input:
+        # 手动输入模式
+        grid = input_grid()
+        if grid:
+            solve_grid(grid, show_color)
+        else:
+            print("已取消")
     else:
         # 示例模式
         example_grids = {
