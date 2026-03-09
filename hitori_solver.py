@@ -284,10 +284,6 @@ class HitoriSolver:
         if self.rule_sandwich_must_be_white():
             changes += 1
 
-        # 规则 2: 角落规则 (L 形三同数)
-        if self.rule_corner_sandwich():
-            changes += 1
-
         # 规则 3: 相邻相同数字对（排除同行/列其他相同数字）
         if self.rule_adjacent_same_pair():
             changes += 1

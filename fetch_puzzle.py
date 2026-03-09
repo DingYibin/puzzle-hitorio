@@ -184,6 +184,52 @@ def get_puzzle(size: str = "5", difficulty: str = "easy") -> tuple[list[list[int
     return get_puzzle_by_size(size_param)
 
 
+def get_puzzle_by_id(size_param: str, puzzle_id: int) -> tuple[list[list[int]] | None, int]:
+    """
+    根据大小和编号获取指定谜题
+
+    Args:
+        size_param: 尺寸参数，如 '0' (5x5 简单), '1' (5x5 普通), etc.
+        puzzle_id: 谜题编号
+
+    Returns:
+        (网格，大小) 或 (None, 0)
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    # POST 到主页获取指定谜题
+    post_data = f"specific=1&size={size_param}&specid={puzzle_id}"
+
+    try:
+        response = requests.post(
+            "https://cn.puzzle-hitori.com/",
+            headers=headers,
+            data=post_data,
+            timeout=30
+        )
+        response.raise_for_status()
+        html = response.text
+
+        # 查找 var task = '...'
+        match = re.search(r"var\s+task\s*=\s*'([^']+)'", html)
+        if match:
+            task_data = match.group(1)
+            grid_size = int(len(task_data) ** 0.5)
+            print(f"获取到谜题 (大小：{grid_size}x{grid_size}, 编号：{puzzle_id})")
+            grid = parse_task_string(task_data, grid_size)
+            return grid, grid_size
+
+        return None, 0
+
+    except Exception as e:
+        print(f"获取谜题时出错：{e}")
+        return None, 0
+
+
 def main():
     """主函数"""
     print("=" * 50)
