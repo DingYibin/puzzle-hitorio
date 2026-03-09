@@ -639,21 +639,9 @@ class HitoriSolver:
 
         # 保存当前状态（使用深拷贝）
         saved_state = copy.deepcopy(self.state)
-        saved_queue = deque(self.propagation_queue)
+        saved_queue = copy.deepcopy(self.propagation_queue)
 
         # 尝试标记为白色
-        self.set_cell_state(r, c, self.BLACK)
-        self.apply_logical_rules()
-
-        # 检查是否有相邻黑色或重复白色
-        if self.check_adjacent_black() and self.check_duplicate_white():
-            if self.backtrack_solve(unknown_cells, idx + 1):
-                return True
-
-        # 恢复状态，尝试标记为黑色
-        self.state = saved_state
-        self.propagation_queue = saved_queue
-
         self.set_cell_state(r, c, self.WHITE)
         self.apply_logical_rules()
 
@@ -661,10 +649,22 @@ class HitoriSolver:
         if self.check_adjacent_black() and self.check_duplicate_white():
             if self.backtrack_solve(unknown_cells, idx + 1):
                 return True
+        # self.print_state_details()
+        # 恢复状态，尝试标记为黑色
+        self.state = copy.deepcopy(saved_state)
+        self.propagation_queue = copy.deepcopy(saved_queue)
 
+        self.set_cell_state(r, c, self.BLACK)
+        self.apply_logical_rules()
+
+        # 检查是否有相邻黑色或重复白色
+        if self.check_adjacent_black() and self.check_duplicate_white():
+            if self.backtrack_solve(unknown_cells, idx + 1):
+                return True
+        # self.print_state_details()
         # 恢复状态
-        self.state = saved_state
-        self.propagation_queue = saved_queue
+        self.state = copy.deepcopy(saved_state)
+        self.propagation_queue = copy.deepcopy(saved_queue)
         return False
 
     # ========== 输出 ==========
