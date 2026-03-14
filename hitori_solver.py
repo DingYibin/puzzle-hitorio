@@ -73,6 +73,7 @@ class HitoriSolver:
         设置格子状态，并立即传播规则
         规则 4: 黑色格子的邻居必须是白色
         规则 5: 白色格子的同行同列相同数字必须是黑色
+        规则 6: 白色格子只有一个未知邻居时，该邻居必须是白色
         返回是否有变化
         """
         if self.state[r][c] != state:
@@ -80,13 +81,19 @@ class HitoriSolver:
             if state == self.BLACK:
                 return self.propagate_black(r, c)
             elif state == self.WHITE:
-                return self.propagate_white(r, c)
+                # 规则 6: 先检查这个新白色格子是否只有一个未知邻居
+                changed = self._check_white_single_unknown_neighbor(r, c)
+                # 然后执行规则 5
+                if self.propagate_white(r, c):
+                    changed = True
+                return changed
         return False
 
     def propagate_black(self, r: int, c: int) -> bool:
         """
         规则 4: 黑色格子的邻居必须是白色
         当某个格子被标记为黑色时，调用此函数将其所有未知邻居标记为白色
+        并对新变白色的格子检查规则 6
         返回是否有变化
         """
         changed = False
@@ -96,6 +103,10 @@ class HitoriSolver:
                 if self.state[nr][nc] == self.UNKNOWN:
                     self.set_cell_state(nr, nc, self.WHITE)
                     changed = True
+                if self.state[nr][nc] == self.WHITE:
+                    # 检查已有的白色邻居是否需要应用规则 6
+                    if self._check_white_single_unknown_neighbor(nr, nc):
+                        changed = True
         return changed
 
     def propagate_white(self, r: int, c: int) -> bool:
@@ -255,47 +266,38 @@ class HitoriSolver:
 
         return changes
 
-    def rule_white_single_unknown_neighbor(self) -> bool:
+    def _check_white_single_unknown_neighbor(self, r: int, c: int) -> bool:
         """
-        规则 6: 如果一个白色格子的周围恰好只有一个未知格子，其他都是黑色，
-               就把那个未知格子标记为白色
-        原因：如果这个未知格子是黑色，白色格子会被黑色包围，可能导致孤立
+        检查单个白色格子是否只有一个未知邻居且其他都是黑色
+        如果是，将该未知邻居标记为白色
+        返回是否有变化
         """
-        changed = False
+        # 统计邻居状态
+        unknown_neighbors = []
+        black_count = 0
+        white_count = 0
 
-        for r in range(self.size):
-            for c in range(self.size):
-                if self.state[r][c] != self.WHITE:
-                    continue
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < self.size and 0 <= nc < self.size:
+                neighbor_state = self.state[nr][nc]
+                if neighbor_state == self.UNKNOWN:
+                    unknown_neighbors.append((nr, nc))
+                elif neighbor_state == self.BLACK:
+                    black_count += 1
+                elif neighbor_state == self.WHITE:
+                    white_count += 1
 
-                # 统计邻居状态
-                unknown_neighbors = []
-                black_count = 0
-                white_count = 0
+        # 检查：恰好一个未知，且其他都是黑色
+        if len(unknown_neighbors) == 1:
+            # 所有非未知邻居都必须是黑色
+            total_neighbors = black_count + white_count + len(unknown_neighbors)
+            if black_count + len(unknown_neighbors) == total_neighbors:
+                ur, uc = unknown_neighbors[0]
+                self.set_cell_state(ur, uc, self.WHITE)
+                return True
 
-                for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    nr, nc = r + dr, c + dc
-                    if 0 <= nr < self.size and 0 <= nc < self.size:
-                        neighbor_state = self.state[nr][nc]
-                        if neighbor_state == self.UNKNOWN:
-                            unknown_neighbors.append((nr, nc))
-                        elif neighbor_state == self.BLACK:
-                            black_count += 1
-                        elif neighbor_state == self.WHITE:
-                            white_count += 1
-
-                # 检查：恰好一个未知，且其他都是黑色（没有白色邻居也可以）
-                # 更准确的条件：未知邻居数为 1，且黑色邻居数 >= 1
-                # 或者：未知邻居数为 1，且总邻居数 - 黑色数 - 未知数 = 0
-                if len(unknown_neighbors) == 1:
-                    # 所有非未知邻居都必须是黑色
-                    total_neighbors = black_count + white_count + len(unknown_neighbors)
-                    if black_count + len(unknown_neighbors) == total_neighbors:
-                        ur, uc = unknown_neighbors[0]
-                        self.set_cell_state(ur, uc, self.WHITE)
-                        changed = True
-
-        return changed
+        return False
 
     def rule_connectivity_single_unknown(self) -> bool:
         """
@@ -388,30 +390,12 @@ class HitoriSolver:
 
         while run_again:
             run_again = False
-            # 应用新规则 6：白色格子单一未知邻居
-            if self.rule_white_single_unknown_neighbor():
-                run_again = True
-                changed = True
-            if self.apply_rules_fast():
-                run_again = True
-                changed = True
             # 应用新规则 7：基于连通性的单一未知推理
             if self.rule_connectivity_single_unknown():
                 run_again = True
                 changed = True
-            if self.apply_rules_fast():
-                run_again = True
-                changed = True
 
         return 1 if changed else 0
-
-    def apply_rules_fast(self) -> bool:
-        """
-        快速应用规则 4 和规则 5（黑邻居必白，白排除同值）
-        已在 set_cell_state 中自动处理，无需额外操作
-        返回是否有变化（始终返回 False，因为变化已在 set_cell_state 中处理）
-        """
-        return False
 
     # ========== 检查和验证 ==========
 
