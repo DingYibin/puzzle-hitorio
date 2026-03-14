@@ -103,7 +103,7 @@ class HitoriSolver:
                 if self.state[nr][nc] == self.UNKNOWN:
                     self.set_cell_state(nr, nc, self.WHITE)
                     changed = True
-                if self.state[nr][nc] == self.WHITE:
+                elif self.state[nr][nc] == self.WHITE:
                     # 检查已有的白色邻居是否需要应用规则 6
                     if self._check_white_single_unknown_neighbor(nr, nc):
                         changed = True
