@@ -79,6 +79,46 @@ class HitoriSolver:
             self.state[r][c] = state
             self.propagation_queue.append((r, c))
 
+    def propagate_black(self, r: int, c: int) -> bool:
+        """
+        规则 4: 黑色格子的邻居必须是白色
+        当某个格子被标记为黑色时，调用此函数将其所有未知邻居标记为白色
+        返回是否有变化
+        """
+        changed = False
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < self.size and 0 <= nc < self.size:
+                if self.state[nr][nc] == self.UNKNOWN:
+                    self.set_cell_state(nr, nc, self.WHITE)
+                    changed = True
+        return changed
+
+    def propagate_white(self, r: int, c: int) -> bool:
+        """
+        规则 5: 白色格子的同行同列相同数字必须是黑色
+        当某个格子被标记为白色时，调用此函数将同行同列的相同数字标记为黑色
+        返回是否有变化
+        """
+        changed = False
+        val = self.grid[r][c]
+
+        # 同行
+        for cc in range(self.size):
+            if cc != c and self.grid[r][cc] == val:
+                if self.state[r][cc] == self.UNKNOWN:
+                    self.set_cell_state(r, cc, self.BLACK)
+                    changed = True
+
+        # 同列
+        for rr in range(self.size):
+            if rr != r and self.grid[rr][c] == val:
+                if self.state[rr][c] == self.UNKNOWN:
+                    self.set_cell_state(rr, c, self.BLACK)
+                    changed = True
+
+        return changed
+
     def propagate_changes(self) -> bool:
         """
         使用队列传播规则 4 和规则 5
@@ -93,31 +133,9 @@ class HitoriSolver:
             current_state = self.state[r][c]
 
             if current_state == self.BLACK:
-                # 规则 4: 黑色格子的邻居必须是白色
-                for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    nr, nc = r + dr, c + dc
-                    if 0 <= nr < self.size and 0 <= nc < self.size:
-                        if self.state[nr][nc] == self.UNKNOWN:
-                            self.set_cell_state(nr, nc, self.WHITE)
-                            changed = True
-
+                changed = self.propagate_black(r, c) or changed
             elif current_state == self.WHITE:
-                # 规则 5: 白色格子的同行同列相同数字必须是黑色
-                val = self.grid[r][c]
-
-                # 同行
-                for cc in range(self.size):
-                    if cc != c and self.grid[r][cc] == val:
-                        if self.state[r][cc] == self.UNKNOWN:
-                            self.set_cell_state(r, cc, self.BLACK)
-                            changed = True
-
-                # 同列
-                for rr in range(self.size):
-                    if rr != r and self.grid[rr][c] == val:
-                        if self.state[rr][c] == self.UNKNOWN:
-                            self.set_cell_state(rr, c, self.BLACK)
-                            changed = True
+                changed = self.propagate_white(r, c) or changed
 
         return changed
 
@@ -307,8 +325,6 @@ class HitoriSolver:
         注意：用一个整数 round 记录访问轮次，visited[r][c] == round 表示
         在当前轮次已访问，避免每次都重新创建二维数组。
         """
-        changed = False
-
         # 初始统计白色格子数量
         white_count = sum(
             1 for r in range(self.size) for c in range(self.size)
