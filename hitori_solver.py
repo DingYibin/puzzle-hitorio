@@ -12,7 +12,6 @@ Hitori 规则:
 import time
 import copy
 from collections import deque
-from typing import Optional
 
 
 class UnionFind:
@@ -57,7 +56,6 @@ class HitoriSolver:
         self.grid = []
         self.size = 0
         self.state = []  # 每个格子的状态
-        self.propagation_queue = deque()  # 传播队列
 
     def set_grid(self, grid: list[list[int]]):
         """设置谜题网格"""
@@ -65,19 +63,25 @@ class HitoriSolver:
         self.grid = grid
         self.state = [[self.UNKNOWN] * self.size for _ in range(self.size)]
         self.start_time = 0
-        self.propagation_queue = deque()
 
     def get_state_name(self, s: int) -> str:
         """获取状态名称"""
         return ["未知", "白", "黑"][s]
 
-    def set_cell_state(self, r: int, c: int, state: int):
+    def set_cell_state(self, r: int, c: int, state: int) -> bool:
         """
-        设置格子状态，并将变化加入传播队列
+        设置格子状态，并立即传播规则
+        规则 4: 黑色格子的邻居必须是白色
+        规则 5: 白色格子的同行同列相同数字必须是黑色
+        返回是否有变化
         """
         if self.state[r][c] != state:
             self.state[r][c] = state
-            self.propagation_queue.append((r, c))
+            if state == self.BLACK:
+                return self.propagate_black(r, c)
+            elif state == self.WHITE:
+                return self.propagate_white(r, c)
+        return False
 
     def propagate_black(self, r: int, c: int) -> bool:
         """
@@ -116,26 +120,6 @@ class HitoriSolver:
                 if self.state[rr][c] == self.UNKNOWN:
                     self.set_cell_state(rr, c, self.BLACK)
                     changed = True
-
-        return changed
-
-    def propagate_changes(self) -> bool:
-        """
-        使用队列传播规则 4 和规则 5
-        规则 4: 黑色格子的邻居必须是白色
-        规则 5: 白色格子的同行同列相同数字必须是黑色
-        返回是否有变化
-        """
-        changed = False
-
-        while self.propagation_queue:
-            r, c = self.propagation_queue.popleft()
-            current_state = self.state[r][c]
-
-            if current_state == self.BLACK:
-                changed = self.propagate_black(r, c) or changed
-            elif current_state == self.WHITE:
-                changed = self.propagate_white(r, c) or changed
 
         return changed
 
@@ -424,10 +408,10 @@ class HitoriSolver:
     def apply_rules_fast(self) -> bool:
         """
         快速应用规则 4 和规则 5（黑邻居必白，白排除同值）
-        使用持续维护的传播队列
-        返回是否有变化
+        已在 set_cell_state 中自动处理，无需额外操作
+        返回是否有变化（始终返回 False，因为变化已在 set_cell_state 中处理）
         """
-        return self.propagate_changes()
+        return False
 
     # ========== 检查和验证 ==========
 
@@ -613,7 +597,6 @@ class HitoriSolver:
 
         # 保存当前状态（使用深拷贝）
         saved_state = copy.deepcopy(self.state)
-        saved_queue = copy.deepcopy(self.propagation_queue)
 
         # 尝试标记为白色
         self.set_cell_state(r, c, self.WHITE)
@@ -623,10 +606,9 @@ class HitoriSolver:
         if self.check_adjacent_black() and self.check_duplicate_white():
             if self.backtrack_solve(unknown_cells, idx + 1):
                 return True
-        
+
         # 恢复状态，尝试标记为黑色
         self.state = copy.deepcopy(saved_state)
-        self.propagation_queue = copy.deepcopy(saved_queue)
 
         self.set_cell_state(r, c, self.BLACK)
         self.apply_logical_rules()
@@ -638,7 +620,6 @@ class HitoriSolver:
 
         # 恢复状态
         self.state = copy.deepcopy(saved_state)
-        self.propagation_queue = copy.deepcopy(saved_queue)
         return False
 
     # ========== 输出 ==========
