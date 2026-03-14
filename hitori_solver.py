@@ -266,6 +266,26 @@ class HitoriSolver:
 
         return changes
 
+    def _count_conflicts(self, r: int, c: int) -> int:
+        """
+        计算一个格子在同行同列有多少个相同数字
+        用于回溯搜索时优先处理冲突多的格子
+        """
+        val = self.grid[r][c]
+        count = 0
+
+        # 同行
+        for cc in range(self.size):
+            if cc != c and self.grid[r][cc] == val:
+                count += 1
+
+        # 同列
+        for rr in range(self.size):
+            if rr != r and self.grid[rr][c] == val:
+                count += 1
+
+        return count
+
     def _check_white_single_unknown_neighbor(self, r: int, c: int) -> bool:
         """
         检查单个白色格子是否只有一个未知邻居且其他都是黑色
@@ -483,13 +503,16 @@ class HitoriSolver:
 
         # 如果还有未知格子，使用回溯法
         if not self.is_complete():
-            # 收集所有未知格子并打乱顺序
-            import random
+            # 收集所有未知格子，按同行同列相同数字的数量从多到少排序
             unknown_cells = [
                 (r, c) for r in range(self.size) for c in range(self.size)
                 if self.state[r][c] == self.UNKNOWN
             ]
-            random.shuffle(unknown_cells)
+            # 按同行同列相同数字的数量排序，优先处理冲突多的格子
+            unknown_cells.sort(
+                key=lambda rc: self._count_conflicts(rc[0], rc[1]),
+                reverse=True
+            )
             print(f"  开始回溯搜索... ({len(unknown_cells)} 个未知格子)")
 
             # 保存回溯前的状态
